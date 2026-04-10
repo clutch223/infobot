@@ -81,8 +81,8 @@ def send_welcome(message):
     if len(args) > 1 and args[1] != uid:
         referrer_id = args[1]
         if uid not in user_db and referrer_id in user_db:
-            user_db[referrer_id]['credits'] += 5
-            user_db[referrer_id]['refers'] += 1
+            user_db[referrer_id]['credits'] = user_db[referrer_id].get('credits', 0) + 5
+            user_db[referrer_id]['refers'] = user_db[referrer_id].get('refers', 0) + 1
             try:
                 bot.send_message(referrer_id, f"🎁 <b>New Referral!</b> You earned 5 credits.", parse_mode="HTML")
             except: pass
@@ -158,26 +158,30 @@ def handle_text(message):
         bot.reply_to(message, plans, parse_mode="HTML")
 
     elif message.text.startswith('/info'):
-        if user_db[uid].get('credits', 0) < 1:
+        current_credits = user_db[uid].get('credits', 0)
+        if current_credits < 1:
             return bot.reply_to(message, "❌ <b>Insufficient Credits!</b> Invite friends or buy plan.", parse_mode="HTML")
         
         args = message.text.split()
         if len(args) > 1:
-            # Enhanced number cleaning for API stability
-            raw_input = args[1].replace("+", "").strip()
-            num = ''.join(filter(str.isdigit, raw_input))
+            # Clean number: removes all non-digit characters
+            num = ''.join(filter(str.isdigit, args[1]))
             
-            # Logic: If 12 digits starting with 91, strip 91. If 10 digits, leave it.
+            # Handling common Indian number mistakes
             if len(num) == 12 and num.startswith('91'):
                 num = num[2:]
+            elif len(num) > 10 and not num.startswith('91'):
+                # Handle cases where user might have pasted a long weird number
+                num = num[-10:]
             
             sent_msg = bot.reply_to(message, "⚡ <b>Searching Intelligence...</b>", parse_mode="HTML")
             try:
                 result = get_number_details(num)
+                # Display output first to ensure user sees something
                 bot.edit_message_text(result, message.chat.id, sent_msg.message_id, parse_mode="HTML", disable_web_page_preview=True)
                 
-                # Only deduct credits on valid intelligence reports
-                if "SASTADEVELOPER INTELLIGENCE" in result:
+                # Credit Deduction logic: Deduct if search was somewhat successful
+                if "❌" not in result and "⚠️" not in result:
                     user_db[uid]['credits'] -= 1
                     save_data(user_db)
             except Exception as e:
