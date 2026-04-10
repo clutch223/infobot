@@ -71,6 +71,15 @@ def is_subscribed(user_id):
 def send_welcome(message):
     uid = str(message.from_user.id)
     
+    # Check for referral in start command
+    args = message.text.split()
+    if len(args) > 1 and args[1] != uid:
+        referrer_id = args[1]
+        if uid not in user_db and referrer_id in user_db:
+            user_db[referrer_id]['credits'] += 5
+            user_db[referrer_id]['refers'] += 1
+            bot.send_message(referrer_id, f"🎁 <b>New Referral!</b> You earned 5 credits.", parse_mode="HTML")
+
     # New User Initialization
     if uid not in user_db:
         user_db[uid] = {"credits": 2, "refers": 0, "plan": "Free"}
@@ -91,9 +100,25 @@ def send_welcome(message):
     else:
         bot.send_message(message.chat.id, welcome_text, parse_mode="HTML", reply_markup=main_menu())
 
+@bot.callback_query_handler(func=lambda call: call.data == "check_join")
+def check_join_callback(call):
+    if is_subscribed(call.from_user.id):
+        bot.answer_callback_query(call.id, "✅ Access Granted!")
+        send_welcome(call.message)
+    else:
+        bot.answer_callback_query(call.id, "❌ Not Joined Yet!", show_alert=True)
+
 @bot.message_handler(func=lambda m: True)
 def handle_text(message):
     uid = str(message.from_user.id)
+    
+    # Force Subscribe Check
+    if not is_subscribed(message.from_user.id):
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("📢 Join Channel", url=CHANNEL_LINK))
+        markup.add(types.InlineKeyboardButton("✅ Check Join", callback_data="check_join"))
+        return bot.send_message(message.chat.id, "⚠️ <b>Bhai, pehle channel join karo!</b>", parse_mode="HTML", reply_markup=markup)
+
     if uid not in user_db:
         user_db[uid] = {"credits": 2, "refers": 0, "plan": "Free"}
         save_data(user_db)
@@ -116,21 +141,32 @@ def handle_text(message):
         ref_link = f"https://t.me/{bot.get_me().username}?start={uid}"
         bot.reply_to(message, f"🎁 <b>Invite friends to earn credits!</b>\n\nYour Link: <code>{ref_link}</code>\n\n<i>1 Refer = 5 Credits</i>", parse_mode="HTML")
 
+    elif message.text == "💎 Plans":
+        plans = (
+            "💎 <b>PREMIUM PLANS</b>\n\n"
+            "1. <b>Basic:</b> 50 Credits - ₹49\n"
+            "2. <b>Ultra:</b> Unlimited - ₹199 (1 Month)\n\n"
+            "Contact @SASTA_DEVELOPER to buy."
+        )
+        bot.reply_to(message, plans, parse_mode="HTML")
+
     elif message.text.startswith('/info'):
         if user_db[uid]['credits'] < 1:
             return bot.reply_to(message, "❌ <b>Insufficient Credits!</b> Invite friends or buy plan.", parse_mode="HTML")
         
         args = message.text.split()
         if len(args) > 1:
-            num = args[1]
+            num = args[1].replace("+", "").strip() # Clean formatting
             sent_msg = bot.reply_to(message, "⚡ <b>Searching Intelligence...</b>", parse_mode="HTML")
             try:
+                # get_number_details cleans the number further to avoid API 400
                 result = get_number_details(num)
                 bot.edit_message_text(result, message.chat.id, sent_msg.message_id, parse_mode="HTML", disable_web_page_preview=True)
                 
-                # Deduct Credit
-                user_db[uid]['credits'] -= 1
-                save_data(user_db)
+                # Deduct Credit only on success (optional: deduct anyway to prevent spam)
+                if "❌" not in result:
+                    user_db[uid]['credits'] -= 1
+                    save_data(user_db)
             except Exception as e:
                 bot.edit_message_text(f"❌ Error: {str(e)}", message.chat.id, sent_msg.message_id)
         else:
