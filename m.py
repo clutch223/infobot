@@ -39,13 +39,16 @@ def main_menu():
 # --- BOT HANDLERS ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    # Fix: Use HTML parse mode to avoid markdown parsing errors
+    # Strictly using HTML to avoid 'Bad Request: can't parse entities'
     welcome_text = (
         "<b>🚀 SASTADEVELOPER BOT ACTIVE</b>\n\n"
         "Bhai, bot Railway par successfully host ho gaya hai!\n\n"
         "Niche diye gaye menu se check karein 👇"
     )
-    bot.reply_to(message, welcome_text, parse_mode="HTML", reply_markup=main_menu())
+    try:
+        bot.reply_to(message, welcome_text, parse_mode="HTML", reply_markup=main_menu())
+    except Exception as e:
+        print(f"Error sending welcome: {e}")
 
 @bot.message_handler(func=lambda m: True)
 def handle_text(message):
@@ -67,13 +70,24 @@ def handle_text(message):
             bot.reply_to(message, "❌ Number missing! Example: <code>/info 919876543210</code>", parse_mode="HTML")
 
 if __name__ == "__main__":
-    # Start Keep-Alive
+    # Start Keep-Alive Web Server
     Thread(target=run).start()
-    print("✅ Web Server & Bot Polling Started...")
+    print("✅ Web Server Running...")
+
+    # Fix for Error 409: Conflict
+    print("⚠️ Clearing old bot sessions...")
+    bot.delete_webhook()
+    time.sleep(1)
     
+    print("🚀 Bot Polling Started...")
     while True:
         try:
             bot.polling(none_stop=True, interval=0, timeout=20)
         except Exception as e:
-            print(f"TeleBot Error: {e}")
-            time.sleep(5)
+            # If conflict occurs, wait longer before retry
+            if "Conflict" in str(e):
+                print("❌ Conflict detected, waiting 10 seconds...")
+                time.sleep(10)
+            else:
+                print(f"TeleBot Error: {e}")
+                time.sleep(5)
