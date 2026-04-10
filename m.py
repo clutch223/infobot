@@ -58,13 +58,18 @@ def main_menu():
     markup.add(btn1, btn2, btn3, btn4)
     return markup
 
-# --- CHECK JOIN ---
+# --- CHECK JOIN (OPTIMIZED) ---
 def is_subscribed(user_id):
+    # Admin is always allowed
+    if user_id == ADMIN_ID:
+        return True
     try:
         status = bot.get_chat_member(CHANNEL_ID, user_id).status
         return status in ['member', 'administrator', 'creator']
-    except:
-        return False
+    except Exception as e:
+        # If check fails due to bot not being admin or API lag, allow user to proceed
+        print(f"Join Check Error: {e}")
+        return True 
 
 # --- BOT HANDLERS ---
 @bot.message_handler(commands=['start'])
@@ -78,11 +83,13 @@ def send_welcome(message):
         if uid not in user_db and referrer_id in user_db:
             user_db[referrer_id]['credits'] += 5
             user_db[referrer_id]['refers'] += 1
-            bot.send_message(referrer_id, f"🎁 <b>New Referral!</b> You earned 5 credits.", parse_mode="HTML")
+            try:
+                bot.send_message(referrer_id, f"🎁 <b>New Referral!</b> You earned 5 credits.", parse_mode="HTML")
+            except: pass
 
     # New User Initialization
     if uid not in user_db:
-        user_db[uid] = {"credits": 2, "refers": 0, "plan": "Free"}
+        user_db[uid] = {"credits": 5, "refers": 0, "plan": "Free"} # Increased initial credits to 5
         save_data(user_db)
 
     welcome_text = (
@@ -120,7 +127,7 @@ def handle_text(message):
         return bot.send_message(message.chat.id, "⚠️ <b>Bhai, pehle channel join karo!</b>", parse_mode="HTML", reply_markup=markup)
 
     if uid not in user_db:
-        user_db[uid] = {"credits": 2, "refers": 0, "plan": "Free"}
+        user_db[uid] = {"credits": 5, "refers": 0, "plan": "Free"}
         save_data(user_db)
 
     if message.text == "🔍 Info":
@@ -156,21 +163,25 @@ def handle_text(message):
         
         args = message.text.split()
         if len(args) > 1:
-            num = args[1].replace("+", "").strip() # Clean formatting
+            # Better number cleaning
+            num = ''.join(filter(str.isdigit, args[1]))
+            if num.startswith('91') and len(num) > 10:
+                num = num[2:] # Strip 91 if it was added twice
+            
             sent_msg = bot.reply_to(message, "⚡ <b>Searching Intelligence...</b>", parse_mode="HTML")
             try:
-                # get_number_details cleans the number further to avoid API 400
                 result = get_number_details(num)
+                # Check if num.py returned an error message as string
                 bot.edit_message_text(result, message.chat.id, sent_msg.message_id, parse_mode="HTML", disable_web_page_preview=True)
                 
-                # Deduct Credit only on success (optional: deduct anyway to prevent spam)
-                if "❌" not in result:
+                # Deduct Credit if not an error result
+                if "❌" not in result and "⚠️" not in result:
                     user_db[uid]['credits'] -= 1
                     save_data(user_db)
             except Exception as e:
-                bot.edit_message_text(f"❌ Error: {str(e)}", message.chat.id, sent_msg.message_id)
+                bot.edit_message_text(f"❌ <b>Search Failed:</b> <code>{str(e)}</code>", message.chat.id, sent_msg.message_id, parse_mode="HTML")
         else:
-            bot.reply_to(message, "❌ Number missing!", parse_mode="HTML")
+            bot.reply_to(message, "❌ Number missing! Usage: <code>/info 919876543210</code>", parse_mode="HTML")
 
 if __name__ == "__main__":
     Thread(target=run).start()
