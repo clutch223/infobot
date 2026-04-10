@@ -1,46 +1,79 @@
 import telebot
-import time
+from telebot import types
+import json
 import os
-from num import get_number_details
+import time
+from flask import Flask
+from threading import Thread
+
+# --- DEPENDENCY CHECK ---
+try:
+    import phonenumbers
+    from num import get_number_details
+except ImportError:
+    os.system("pip install phonenumbers pyTelegramBotAPI flask requests")
+    import phonenumbers
+    from num import get_number_details
 
 # --- CONFIGURATION ---
 TOKEN = '8609540387:AAF_wXfX_lc6yc3OQokpAilUjaRPFDdiwQc'
 bot = telebot.TeleBot(TOKEN)
 
+# --- RAILWAY WEB SERVER ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is Running!"
+
+def run():
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
+
+# --- KEYBOARDS ---
+def main_menu():
+    markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    markup.add("🔍 Info", "👤 My Stats")
+    return markup
+
+# --- BOT HANDLERS ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
+    # Fix: Use HTML parse mode to avoid markdown parsing errors
     welcome_text = (
-        "🔥 **PREMIUM MULTI-TOOL BOT** 🔥\n\n"
-        "Ready to fetch details from Database.\n\n"
-        "📌 **Command:**\n"
-        "👉 `/info <number>` - Get Full Details\n\n"
-        "DEVELOPER: @SASTA_DEVELOPER"
+        "<b>🚀 SASTADEVELOPER BOT ACTIVE</b>\n\n"
+        "Bhai, bot Railway par successfully host ho gaya hai!\n\n"
+        "Niche diye gaye menu se check karein 👇"
     )
-    bot.reply_to(message, welcome_text, parse_mode="Markdown")
+    bot.reply_to(message, welcome_text, parse_mode="HTML", reply_markup=main_menu())
 
-@bot.message_handler(commands=['info'])
-def handle_info(message):
-    text = message.text.split()
-    if len(text) > 1:
-        number = text[1]
-        sent_msg = bot.reply_to(message, "🔍 **Searching Database... Please wait.**", parse_mode="Markdown")
-        
-        try:
-            # num.py function call
-            full_report = get_number_details(number)
-            bot.edit_message_text(full_report, message.chat.id, sent_msg.message_id, parse_mode="Markdown")
-        except Exception as e:
-            bot.edit_message_text(f"❌ **System Error:** {str(e)}", message.chat.id, sent_msg.message_id)
-    else:
-        bot.reply_to(message, "📝 **Usage:** `/info +91XXXXXXXXXX`", parse_mode="Markdown")
+@bot.message_handler(func=lambda m: True)
+def handle_text(message):
+    if message.text == "🔍 Info":
+        bot.reply_to(message, "📝 <b>Usage:</b> <code>/info 91xxxx</code>", parse_mode="HTML")
+    
+    elif message.text.startswith('/info'):
+        args = message.text.split()
+        if len(args) > 1:
+            num = args[1]
+            sent_msg = bot.reply_to(message, "⚡ <b>Searching Database...</b>", parse_mode="HTML")
+            try:
+                # num.py already returns HTML formatted text
+                result = get_number_details(num)
+                bot.edit_message_text(result, message.chat.id, sent_msg.message_id, parse_mode="HTML", disable_web_page_preview=True)
+            except Exception as e:
+                bot.edit_message_text(f"❌ Error: {str(e)}", message.chat.id, sent_msg.message_id)
+        else:
+            bot.reply_to(message, "❌ Number missing! Example: <code>/info 919876543210</code>", parse_mode="HTML")
 
 if __name__ == "__main__":
-    print("🚀 BOT IS STARTING...")
-    print("✅ Token Verified!")
-    print("📡 Connected to API Market...")
+    # Start Keep-Alive
+    Thread(target=run).start()
+    print("✅ Web Server & Bot Polling Started...")
+    
     while True:
         try:
             bot.polling(none_stop=True, interval=0, timeout=20)
         except Exception as e:
-            print(f"Polling Error: {e}")
+            print(f"TeleBot Error: {e}")
             time.sleep(5)
