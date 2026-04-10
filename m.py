@@ -61,7 +61,7 @@ def main_menu():
 # --- CHECK JOIN (OPTIMIZED) ---
 def is_subscribed(user_id):
     # Admin is always allowed
-    if user_id == ADMIN_ID:
+    if int(user_id) == ADMIN_ID:
         return True
     try:
         status = bot.get_chat_member(CHANNEL_ID, user_id).status
@@ -89,13 +89,13 @@ def send_welcome(message):
 
     # New User Initialization
     if uid not in user_db:
-        user_db[uid] = {"credits": 5, "refers": 0, "plan": "Free"} # Increased initial credits to 5
+        user_db[uid] = {"credits": 5, "refers": 0, "plan": "Free"}
         save_data(user_db)
 
     welcome_text = (
         f"<b>🚀 WELCOME TO SASTADEVELOPER v2.0</b>\n\n"
         f"<b>User ID:</b> <code>{uid}</code>\n"
-        f"<b>Balance:</b> <code>{user_db[uid]['credits']} Credits</code>\n\n"
+        f"<b>Balance:</b> <code>{user_db[uid].get('credits', 0)} Credits</code>\n\n"
         f"<i>Premium Intelligence at your fingertips.</i>"
     )
     
@@ -137,9 +137,9 @@ def handle_text(message):
         stats = (
             f"👤 <b>USER DASHBOARD</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"💰 <b>Credits:</b> {user_db[uid]['credits']}\n"
-            f"👥 <b>Refers:</b> {user_db[uid]['refers']}\n"
-            f"👑 <b>Plan:</b> {user_db[uid]['plan']}\n"
+            f"💰 <b>Credits:</b> {user_db[uid].get('credits', 0)}\n"
+            f"👥 <b>Refers:</b> {user_db[uid].get('refers', 0)}\n"
+            f"👑 <b>Plan:</b> {user_db[uid].get('plan', 'Free')}\n"
             f"━━━━━━━━━━━━━━━━━━━━"
         )
         bot.reply_to(message, stats, parse_mode="HTML")
@@ -158,24 +158,26 @@ def handle_text(message):
         bot.reply_to(message, plans, parse_mode="HTML")
 
     elif message.text.startswith('/info'):
-        if user_db[uid]['credits'] < 1:
+        if user_db[uid].get('credits', 0) < 1:
             return bot.reply_to(message, "❌ <b>Insufficient Credits!</b> Invite friends or buy plan.", parse_mode="HTML")
         
         args = message.text.split()
         if len(args) > 1:
-            # Better number cleaning
-            num = ''.join(filter(str.isdigit, args[1]))
-            if num.startswith('91') and len(num) > 10:
-                num = num[2:] # Strip 91 if it was added twice
+            # Enhanced number cleaning for API stability
+            raw_input = args[1].replace("+", "").strip()
+            num = ''.join(filter(str.isdigit, raw_input))
+            
+            # Logic: If 12 digits starting with 91, strip 91. If 10 digits, leave it.
+            if len(num) == 12 and num.startswith('91'):
+                num = num[2:]
             
             sent_msg = bot.reply_to(message, "⚡ <b>Searching Intelligence...</b>", parse_mode="HTML")
             try:
                 result = get_number_details(num)
-                # Check if num.py returned an error message as string
                 bot.edit_message_text(result, message.chat.id, sent_msg.message_id, parse_mode="HTML", disable_web_page_preview=True)
                 
-                # Deduct Credit if not an error result
-                if "❌" not in result and "⚠️" not in result:
+                # Only deduct credits on valid intelligence reports
+                if "SASTADEVELOPER INTELLIGENCE" in result:
                     user_db[uid]['credits'] -= 1
                     save_data(user_db)
             except Exception as e:
