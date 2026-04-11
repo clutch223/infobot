@@ -1,57 +1,62 @@
 import requests
 import phonenumbers
-from phonenumbers import geocoder, carrier, timezone
-import time
+from phonenumbers import geocoder, carrier
 
 # --- CONFIGURATION ---
-API_KEY = "cmnow6gs40001l804b7quiccv" 
-API_URL = "https://prod.api.market/api/v1/magicapi/numinfo"
+API_BASE_URL = "https://number-info-rootxindia.satyamrajsingh49.workers.dev/"
+API_KEY = "rootxpaidh"
+CHANNEL_URL = "https://t.me/+jMe1PNQv_koxNzI1"
 
 def get_number_details(phone_number):
+    """
+    Stable logic that worked in terminal
+    """
     try:
-        # Step 1: Formatting
-        clean_number = phone_number.replace("+", "").replace(" " , "").replace("-", "")
-        intl_number = "+" + clean_number if not clean_number.startswith('+') else clean_number
-        parsed_basic = phonenumbers.parse(intl_number)
+        # Cleaning for API: remove +, spaces, and ensure it's just digits
+        clean_number = "".join(filter(str.isdigit, phone_number))
         
-        # Step 2: API Call
-        response = requests.post(API_URL, headers={
-            'Authorization': f'Bearer {API_KEY}',
-            'Content-Type': 'application/json'
-        }, json={"number": clean_number}, timeout=10)
+        # If user sends 12 digits starting with 91, we keep it. 
+        # If 10 digits, we pass it as is (API might handle India as default)
+        
+        params = {'key': API_KEY, 'n': clean_number}
+        # Increased timeout and added User-Agent to avoid Code 400 on Cloudflare workers
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        response = requests.get(API_BASE_URL, params=params, headers=headers, timeout=15)
 
-        report = f"🔥 **PREMIUM INTELLIGENCE REPORT** 🔥\n"
+        report = f"<b>💠 <u>SASTADEVELOPER INTELLIGENCE</u> 💠</b>\n"
         report += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        report += f"📑 **Target:** `{intl_number}`\n"
+        report += f"🎯 <b>TARGET:</b> <code>{clean_number}</code>\n"
         report += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
 
         if response.status_code == 200:
-            data_list = response.json()
+            data = response.json()
+            user_data = data[0] if isinstance(data, list) and len(data) > 0 else data
             
-            if isinstance(data_list, list) and len(data_list) > 0:
-                user_data = data_list[0]
+            if user_data and isinstance(user_data, dict) and 'name' in user_data:
+                report += f"👤 <b>IDENTITY PROFILE</b>\n"
+                report += f"┣ <b>NAME:</b> <b>{user_data.get('name', 'N/A').upper()}</b>\n"
+                report += f"┗ <b>FATHER:</b> <b>{user_data.get('fname', 'N/A').upper()}</b>\n\n"
                 
-                report += f"👤 **NAME INFO**\n"
-                report += f"  ┗ Full Name: `{user_data.get('name', 'N/A')}`\n"
-                report += f"  ┗ Father: `{user_data.get('fname', 'N/A')}`\n\n"
+                report += f"🆔 <b>KYC DOCUMENTS</b>\n"
+                report += f"┣ <b>DOC ID:</b> <code>{user_data.get('id', 'N/A')}</code>\n"
+                report += f"┗ <b>E-MAIL:</b> <code>{user_data.get('email', 'N/A')}</code>\n\n"
                 
-                report += f"📍 **LOCATION & ADDRESS**\n"
-                report += f"  ┗ Address: `{user_data.get('address', 'N/A')}`\n"
-                report += f"  ┗ Circle: `{user_data.get('circle', 'N/A')}`\n\n"
-                
-                report += f"📱 **CONNECTIVITY**\n"
-                report += f"  ┗ Alternate: `{user_data.get('alt', 'None')}`\n"
-                report += f"  ┗ Carrier: `{carrier.name_for_number(parsed_basic, 'en')}`\n"
-                report += f"  ┗ Email: `{user_data.get('email', 'N/A')}`\n"
+                report += f"📍 <b>LOCATION DATA</b>\n"
+                report += f"┗ <b>ADDRESS:</b> <code>{user_data.get('address', 'N/A')}</code>\n"
             else:
-                report += "⚠️ **NOTICE:** Record not found in leaks.\n"
+                report += "❌ <b>STATUS:</b> No records found for this number.\n"
         else:
-            report += f"⚠️ **API Error:** Code {response.status_code}\n"
+            # This is where Code 400 was caught
+            report += f"⚠️ <b>API Error:</b> Code {response.status_code}\n"
+            report += f"<i>Check if API Key is valid or number format is correct.</i>\n"
 
         report += f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        report += f"🛠️ **BY:** @SASTA_DEVELOPER"
+        report += f"👑 <b>POWERED BY:</b> @SASTADEVELOPER\n"
+        report += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         
         return report
-
     except Exception as e:
-        return f"❌ **Failure:** `{str(e)}`"
+        return f"❌ <b>CRITICAL FAILURE:</b>\n<code>{str(e)}</code>"
