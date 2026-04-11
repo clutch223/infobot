@@ -51,9 +51,10 @@ def main_menu():
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     btn1 = types.KeyboardButton("🔍 Info")
     btn2 = types.KeyboardButton("👤 My Stats")
-    btn3 = types.KeyboardButton("🎁 Refer & Earn")
-    btn4 = types.KeyboardButton("💎 Plans")
-    markup.add(btn1, btn2, btn3, btn4)
+    btn3 = types.KeyboardButton("🆔 My ID")
+    btn4 = types.KeyboardButton("🎁 Refer & Earn")
+    btn5 = types.KeyboardButton("💎 Plans")
+    markup.add(btn1, btn2, btn3, btn4, btn5)
     return markup
 
 # --- JOIN CHECK ---
@@ -63,7 +64,7 @@ def is_subscribed(user_id):
     try:
         status = bot.get_chat_member(CHANNEL_ID, user_id).status
         return status in ['member', 'administrator', 'creator']
-    except Exception as e:
+    except Exception:
         return True 
 
 # --- BOT HANDLERS ---
@@ -109,6 +110,29 @@ def check_join_callback(call):
     else:
         bot.answer_callback_query(call.id, "❌ Join First!", show_alert=True)
 
+# --- ADMIN COMMAND: ADD CREDITS ---
+@bot.message_handler(commands=['add'])
+def add_credits(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    
+    args = message.text.split()
+    if len(args) == 3:
+        target_id = args[1]
+        amount = int(args[2])
+        
+        if target_id in user_db:
+            user_db[target_id]['credits'] = user_db[target_id].get('credits', 0) + amount
+            save_data(user_db)
+            bot.reply_to(message, f"✅ Added {amount} credits to User <code>{target_id}</code>", parse_mode="HTML")
+            try:
+                bot.send_message(target_id, f"🎉 <b>Admin has added {amount} credits to your account!</b>", parse_mode="HTML")
+            except: pass
+        else:
+            bot.reply_to(message, "❌ User not found in database.")
+    else:
+        bot.reply_to(message, "📝 <b>Usage:</b> <code>/add &lt;user_id&gt; &lt;amount&gt;</code>", parse_mode="HTML")
+
 @bot.message_handler(func=lambda m: True)
 def handle_text(message):
     uid = str(message.from_user.id)
@@ -133,6 +157,9 @@ def handle_text(message):
             f"━━━━━━━━━━━━━━━━━━━━"
         )
         bot.reply_to(message, stats, parse_mode="HTML")
+
+    elif message.text == "🆔 My ID":
+        bot.reply_to(message, f"Your Telegram ID: <code>{uid}</code>", parse_mode="HTML")
 
     elif message.text == "🎁 Refer & Earn":
         ref_link = f"https://t.me/{bot.get_me().username}?start={uid}"
@@ -160,7 +187,6 @@ def handle_text(message):
                 full_report = get_number_details(number)
                 bot.edit_message_text(full_report, message.chat.id, sent_msg.message_id, parse_mode="HTML", disable_web_page_preview=True)
                 
-                # Deduct credit if success
                 if "SASTADEVELOPER INTELLIGENCE" in full_report:
                     user_db[uid]['credits'] -= 1
                     save_data(user_db)
