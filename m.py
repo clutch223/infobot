@@ -119,17 +119,18 @@ def add_credits(message):
     args = message.text.split()
     if len(args) == 3:
         target_id = args[1]
-        amount = int(args[2])
-        
-        if target_id in user_db:
-            user_db[target_id]['credits'] = user_db[target_id].get('credits', 0) + amount
-            save_data(user_db)
-            bot.reply_to(message, f"✅ Added {amount} credits to User <code>{target_id}</code>", parse_mode="HTML")
-            try:
-                bot.send_message(target_id, f"🎉 <b>Admin has added {amount} credits to your account!</b>", parse_mode="HTML")
-            except: pass
-        else:
-            bot.reply_to(message, "❌ User not found in database.")
+        try:
+            amount = int(args[2])
+            if target_id in user_db:
+                user_db[target_id]['credits'] = user_db[target_id].get('credits', 0) + amount
+                save_data(user_db)
+                bot.reply_to(message, f"✅ Added {amount} credits to User <code>{target_id}</code>", parse_mode="HTML")
+                try: bot.send_message(target_id, f"🎉 <b>Admin has added {amount} credits to your account!</b>", parse_mode="HTML")
+                except: pass
+            else:
+                bot.reply_to(message, "❌ User not found in database.")
+        except:
+            bot.reply_to(message, "❌ Invalid amount.")
     else:
         bot.reply_to(message, "📝 <b>Usage:</b> <code>/add &lt;user_id&gt; &lt;amount&gt;</code>", parse_mode="HTML")
 
