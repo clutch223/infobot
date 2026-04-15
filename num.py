@@ -9,7 +9,7 @@ def get_number_details(phone_number):
         # Clean number for API
         clean_number = "".join(filter(str.isdigit, phone_number))
         
-        # Handling Indian number formats
+        # Handle 12-digit numbers
         if len(clean_number) == 12 and clean_number.startswith('91'):
             clean_number = clean_number[2:]
             
@@ -27,37 +27,37 @@ def get_number_details(phone_number):
 
         if response.status_code == 200:
             data = response.json()
-            
-            # Logic to find results in the new nested structure
             results = []
             
-            # Check api-2 first as it's more detailed in your example
+            # EXACT PARSING AS PER SCREENSHOT
+            # API-2 structure: api-2 -> result -> results -> []
             if "api-2" in data and data["api-2"].get("success"):
-                results = data["api-2"]["result"].get("data", [])
-            # Fallback to api-1 if api-2 is empty
-            elif "api-1" in data and data["api-1"].get("count", 0) > 0:
+                api2_obj = data["api-2"].get("result", {})
+                results = api2_obj.get("results", [])
+            
+            # Fallback to API-1: api-1 -> results -> []
+            if not results and "api-1" in data:
                 results = data["api-1"].get("results", [])
 
             if results:
-                # Using a set to keep track of unique IDs to avoid duplicates
+                # Sirf unique records dikhane ke liye
                 seen_ids = set()
-                found_unique = False
+                found_any = False
                 
                 for item in results:
-                    # Normalize keys (some are uppercase in api-2)
                     res_id = item.get('id') or item.get('ID') or 'N/A'
                     
-                    if res_id not in seen_ids or res_id == 'N/A':
+                    if res_id not in seen_ids:
                         seen_ids.add(res_id)
-                        found_unique = True
+                        found_any = True
                         
                         name = item.get('name') or item.get('NAME') or 'N/A'
                         fname = item.get('fname') or item.get('FNAME') or 'N/A'
                         address = item.get('address') or item.get('ADDRESS') or 'N/A'
-                        email = item.get('email') or 'N/A'
+                        circle = item.get('circle') or 'N/A'
                         alt = item.get('alt') or 'N/A'
                         
-                        # Formatting address (removing extra ! from your example)
+                        # Clean Address formatting
                         clean_address = address.replace('!', ' ').strip()
                         
                         report += f"👤 <b>IDENTITY PROFILE</b>\n"
@@ -67,19 +67,19 @@ def get_number_details(phone_number):
                         report += f"🆔 <b>KYC DOCUMENTS</b>\n"
                         report += f"┣ <b>DOC ID:</b> <code>{res_id}</code>\n"
                         report += f"┣ <b>ALT NO:</b> <code>{alt}</code>\n"
-                        report += f"┗ <b>E-MAIL:</b> <code>{email}</code>\n\n"
+                        report += f"┗ <b>CIRCLE:</b> <code>{circle}</code>\n\n"
                         
                         report += f"📍 <b>LOCATION DATA</b>\n"
                         report += f"┗ <b>ADDRESS:</b> <code>{clean_address}</code>\n"
                         report += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-
-                if not found_unique:
-                    report += "❌ <b>STATUS:</b> No unique records found.\n"
+                
+                if not found_any:
+                    report += "❌ <b>STATUS:</b> No valid records found.\n"
             else:
-                report += "❌ <b>STATUS:</b> No records found in Database.\n"
+                report += "❌ <b>STATUS:</b> Data not found in Database.\n"
         else:
             report += f"⚠️ <b>API Error:</b> Code {response.status_code}\n"
-            report += f"<i>System busy or invalid request.</i>\n"
+            report += f"<i>Check your API Key or connection.</i>\n"
 
         report += f"👑 <b>POWERED BY:</b> @SASTADEVELOPER\n"
         report += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
