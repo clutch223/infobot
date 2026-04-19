@@ -1,133 +1,82 @@
-import telebot
-from telebot import types
-import json, os, time
-from flask import Flask
-from threading import Thread
-import num
+import requests
 
-# --- CONFIGURATION ---
-TOKEN = '8609540387:AAF_wXfX_lc6yc3OQokpAilUjaRPFDdiwQc'
-ADMIN_ID = 8787952549 
-CHANNEL_ID = '-1001003605767830' 
-CHANNEL_LINK = 'https://t.me/+jMe1PNQv_koxNzI1'
+# --- CONFIGURATIONS ---
+KYC_API_URL = "https://numbe-info-rootxindia-fixed.satyamrajsingh49.workers.dev/"
+KYC_API_KEY = "rootxindia14may82NA1"
 
-bot = telebot.TeleBot(TOKEN)
-app = Flask('')
-DATA_FILE = "user_database.json"
+TG_API_URL = "https://api-rootxindia.vercel.app/"
+TG_API_KEY = "sasta_dev_720"
 
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            try:
-                data = json.load(f)
-                return data if isinstance(data, dict) else {}
-            except: return {}
-    return {}
-
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
-
-user_db = load_data()
-
-@app.route('/')
-def home(): return "Bot is Running"
-
-def run(): app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
-
-def is_subscribed(user_id):
-    if int(user_id) == ADMIN_ID: return True
+def get_kyc_details(phone_number):
+    """System 1: Number to Details (KYC/Address)"""
+    clean_num = "".join(filter(str.isdigit, phone_number))[-10:]
+    params = {'key': KYC_API_KEY, 'num': clean_num}
+    
     try:
-        status = bot.get_chat_member(CHANNEL_ID, user_id).status
-        return status in ['member', 'administrator', 'creator']
-    except: return True 
+        res = requests.get(KYC_API_URL, params=params, timeout=25)
+        if res.status_code == 200:
+            data = res.json()
+            # Dynamic check for API-2 then API-1
+            results = data.get("api-2", {}).get("result", {}).get("results", [])
+            if not results:
+                results = data.get("api-1", {}).get("results", [])
+            
+            if results:
+                item = results[0]
+                report = f"<b>💠 <u>SASTA KYC SCAN</u> 💠</b>\n"
+                report += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                report += f"👤 <b>NAME:</b> <b>{item.get('name', 'N/A').upper()}</b>\n"
+                report += f"┣ <b>FATHER:</b> {item.get('fname', 'N/A').upper()}\n"
+                report += f"🆔 <b>KYC DOCUMENTS</b>\n"
+                report += f"┣ <b>DOC ID:</b> <code>{item.get('id', 'N/A')}</code>\n"
+                report += f"┣ <b>ALT NO:</b> <code>{item.get('alt', 'N/A')}</code>\n"
+                report += f"┗ <b>CIRCLE:</b> <code>{item.get('circle', 'N/A')}</code>\n\n"
+                report += f"📍 <b>LOCATION DATA</b>\n"
+                report += f"┗ <b>ADDRESS:</b> <code>{item.get('address', 'N/A').replace('!', ' ')}</code>\n"
+                report += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n👑 <b>BY:</b> @SASTADEVELOPER"
+                return report
+            return "❌ <b>No records found in Database.</b>"
+        return f"⚠️ <b>Server Error:</b> {res.status_code}"
+    except:
+        return "❌ <b>KYC Timeout:</b> Server too slow."
 
-def ensure_user(uid):
-    """KeyError Fix: Ensures user exists in DB before any operation"""
-    uid = str(uid)
-    global user_db
-    if uid not in user_db:
-        user_db[uid] = {"credits": 5, "refers": 0, "plan": "Free"}
-        save_data(user_db)
-    return user_db[uid]
-
-@bot.message_handler(commands=['start'])
-def start(message):
-    uid = str(message.from_user.id)
-    ensure_user(uid)
+def get_tg_details(query):
+    """System 2: TG ID/User to Number (Vercel API)"""
+    query = str(query).strip().replace("@", "")
+    params = {'type': 'tg_num', 'key': TG_API_KEY, 'query': query}
     
-    markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    markup.add("🔍 Info (Num)", "👤 TG-Scan", "👤 My Stats", "🆔 My ID")
-    
-    if not is_subscribed(message.from_user.id):
-        join_mark = types.InlineKeyboardMarkup()
-        join_mark.add(types.InlineKeyboardButton("📢 Join Channel", url=CHANNEL_LINK))
-        join_mark.add(types.InlineKeyboardButton("✅ Check Join", callback_data="check"))
-        bot.send_message(message.chat.id, "⚠️ <b>Please join our channel to use the bot!</b>", parse_mode="HTML", reply_markup=join_mark)
-    else:
-        bot.send_message(message.chat.id, "🔥 <b>SASTA OSINT READY</b>\n\nCommands:\n- <code>/info &lt;number&gt;</code>\n- <code>/tg &lt;username/id&gt;</code>", parse_mode="HTML", reply_markup=markup)
-
-@bot.callback_query_handler(func=lambda c: c.data == "check")
-def check(call):
-    if is_subscribed(call.from_user.id):
-        bot.answer_callback_query(call.id, "✅ Access Granted!")
-        start(call.message)
-    else: bot.answer_callback_query(call.id, "❌ Join First!", show_alert=True)
-
-@bot.message_handler(commands=['add'])
-def add(message):
-    if message.from_user.id != ADMIN_ID: return
     try:
-        args = message.text.split()
-        target, amt = args[1], int(args[2])
-        ensure_user(target)
-        user_db[target]['credits'] += amt
-        save_data(user_db)
-        bot.reply_to(message, f"✅ Added {amt} credits to {target}")
-    except: bot.reply_to(message, "Usage: /add <id> <amt>")
-
-@bot.message_handler(func=lambda m: True)
-def handle_all(message):
-    uid = str(message.from_user.id)
-    # Critical Fix: Register user on every message to prevent KeyErrors
-    u_data = ensure_user(uid)
-    
-    if not is_subscribed(message.from_user.id): return
-
-    if message.text == "🔍 Info (Num)":
-        bot.reply_to(message, "Usage: <code>/info 91xxxxxx</code>", parse_mode="HTML")
-    elif message.text == "👤 TG-Scan":
-        bot.reply_to(message, "Usage: <code>/tg username</code>", parse_mode="HTML")
-    elif message.text == "👤 My Stats":
-        bot.reply_to(message, f"💰 <b>CREDITS:</b> {u_data.get('credits', 0)}\n👑 <b>PLAN:</b> {u_data.get('plan', 'Free')}", parse_mode="HTML")
-    elif message.text == "🆔 My ID":
-        bot.reply_to(message, f"Your ID: <code>{uid}</code>", parse_mode="HTML")
-        
-    elif message.text.startswith('/info'):
-        if u_data['credits'] < 1: return bot.reply_to(message, "❌ <b>Insufficient Credits!</b>", parse_mode="HTML")
-        args = message.text.split()
-        if len(args) > 1:
-            m = bot.reply_to(message, "🔍 <b>Searching KYC...</b>", parse_mode="HTML")
-            rep = num.get_kyc_details(args[1])
-            bot.edit_message_text(rep, message.chat.id, m.message_id, parse_mode="HTML")
-            if "💠" in rep: # Only deduct if successful
-                user_db[uid]['credits'] -= 1
-                save_data(user_db)
-        else: bot.reply_to(message, "Usage: /info 91xxxx")
-
-    elif message.text.startswith('/tg'):
-        if u_data['credits'] < 1: return bot.reply_to(message, "❌ <b>Insufficient Credits!</b>", parse_mode="HTML")
-        args = message.text.split()
-        if len(args) > 1:
-            m = bot.reply_to(message, "🔍 <b>Scanning Telegram Database...</b>", parse_mode="HTML")
-            rep = num.get_tg_details(args[1])
-            bot.edit_message_text(rep, message.chat.id, m.message_id, parse_mode="HTML")
-            if "💠" in rep: # Only deduct if successful
-                user_db[uid]['credits'] -= 1
-                save_data(user_db)
-        else: bot.reply_to(message, "Usage: /tg username")
-
-if __name__ == "__main__":
-    Thread(target=run).start()
-    print("🚀 BOT DEPLOYED ON RAILWAY")
-    bot.polling(none_stop=True)
+        res = requests.get(TG_API_URL, params=params, timeout=25)
+        if res.status_code == 200:
+            full = res.json()
+            
+            # Deep Parsing logic for Vercel API response
+            # Structure: data -> data -> result
+            d1 = full.get("data", {})
+            d2 = d1.get("data", {}) if isinstance(d1.get("data"), dict) else d1
+            res_node = d2.get("result", {})
+            
+            # Check success in any node
+            is_success = full.get("success") or d1.get("success") or d2.get("success") or res_node.get("success")
+            
+            if is_success:
+                num_val = d2.get("number") or res_node.get("number")
+                if not num_val: return "❌ <b>No number linked to this ID.</b>"
+                
+                tg_id = d2.get("tg_id") or res_node.get("tg_id") or query
+                c_code = res_node.get("country_code") or "+91"
+                
+                report = f"<b>💠 <u>SASTA TG-SCAN</u> 💠</b>\n"
+                report += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                report += f"📱 <b>IDENTIFIED NUMBER:</b>\n"
+                report += f"┗ <b><code>{c_code}{num_val}</code></b>\n\n"
+                report += f"👤 <b>TELEGRAM PROFILE</b>\n"
+                report += f"┣ <b>TG ID:</b> <code>{tg_id}</code>\n"
+                report += f"┣ <b>REGION:</b> <code>{res_node.get('country', 'India')}</code>\n"
+                report += f"┗ <b>STATUS:</b> <code>{d2.get('msg', 'Fetched')}</code>\n"
+                report += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n👑 <b>BY:</b> @SASTADEVELOPER"
+                return report
+            return f"❌ <b>Result:</b> {d2.get('msg', 'Profile not found in database.')}"
+        return "⚠️ <b>TG API Server Error.</b>"
+    except Exception as e:
+        return f"❌ <b>System Error:</b> API not responding."
