@@ -3,7 +3,7 @@ from telebot import types
 import json, os, time
 from flask import Flask
 from threading import Thread
-import num # Importing our custom logic
+import num
 
 # --- CONFIGURATION ---
 TOKEN = '8609540387:AAF_wXfX_lc6yc3OQokpAilUjaRPFDdiwQc'
@@ -29,7 +29,7 @@ def save_data(data):
 user_db = load_data()
 
 @app.route('/')
-def home(): return "Multi-OSINT Bot Online!"
+def home(): return "Multi-OSINT System Online!"
 
 def run(): app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
 
@@ -58,7 +58,7 @@ def start(message):
         markup.add(types.InlineKeyboardButton("✅ Check Join", callback_data="check"))
         bot.send_message(message.chat.id, "⚠️ <b>Please join our channel to use the bot!</b>", parse_mode="HTML", reply_markup=markup)
     else:
-        bot.send_message(message.chat.id, "🔥 <b>SASTA PREMIUM OSINT</b>\n\nCommands:\n1. <code>/info &lt;number&gt;</code>\n2. <code>/tg &lt;username&gt;</code>", parse_mode="HTML", reply_markup=main_menu())
+        bot.send_message(message.chat.id, "🔥 <b>SASTA OSINT ENGINE ONLINE</b> 🔥\n\n- Use <code>/info &lt;number&gt;</code> for KYC Details\n- Use <code>/tg &lt;username/id&gt;</code> for TG-to-Number", parse_mode="HTML", reply_markup=main_menu())
 
 @bot.callback_query_handler(func=lambda c: c.data == "check")
 def check(call):
@@ -72,30 +72,36 @@ def add(message):
     if message.from_user.id != ADMIN_ID: return
     args = message.text.split()
     if len(args) == 3:
-        user_db[args[1]]['credits'] += int(args[2])
-        save_data(user_db)
-        bot.reply_to(message, "✅ Credits Added Successfully.")
+        target = args[1]
+        amount = int(args[2])
+        if target in user_db:
+            user_db[target]['credits'] += amount
+            save_data(user_db)
+            bot.reply_to(message, f"✅ Added {amount} credits to {target}")
+        else: bot.reply_to(message, "❌ User not in DB.")
 
 @bot.message_handler(func=lambda m: True)
-def handle(message):
+def handle_messages(message):
     uid = str(message.from_user.id)
     if not is_subscribed(message.from_user.id): return
-    
+
     if message.text == "🔍 Info (Num)":
         bot.reply_to(message, "Usage: <code>/info 91xxxx</code>", parse_mode="HTML")
     elif message.text == "👤 TG-Scan":
         bot.reply_to(message, "Usage: <code>/tg username</code>", parse_mode="HTML")
     elif message.text == "👤 My Stats":
-        bot.reply_to(message, f"💰 Credits: {user_db[uid]['credits']}")
+        bot.reply_to(message, f"👤 <b>STATS</b>\n💰 Credits: {user_db[uid].get('credits', 0)}\n👑 Plan: {user_db[uid].get('plan', 'Free')}", parse_mode="HTML")
     elif message.text == "🆔 My ID":
-        bot.reply_to(message, f"ID: <code>{uid}</code>", parse_mode="HTML")
-    
-    # SYSTEM 1: NUMBER INFO
+        bot.reply_to(message, f"Your ID: <code>{uid}</code>", parse_mode="HTML")
+    elif message.text == "🎁 Refer & Earn":
+        bot.reply_to(message, f"Link: <code>https://t.me/{bot.get_me().username}?start={uid}</code>", parse_mode="HTML")
+
+    # --- KYC SCAN COMMAND ---
     elif message.text.startswith('/info'):
         if user_db[uid]['credits'] < 1: return bot.reply_to(message, "❌ Low Credits!")
         args = message.text.split()
         if len(args) > 1:
-            m = bot.reply_to(message, "🔍 <b>Searching KYC Database...</b>", parse_mode="HTML")
+            m = bot.reply_to(message, "🔍 <b>Searching KYC...</b>", parse_mode="HTML")
             report = num.get_kyc_details(args[1])
             bot.edit_message_text(report, message.chat.id, m.message_id, parse_mode="HTML")
             if "SASTA" in report:
@@ -103,12 +109,12 @@ def handle(message):
                 save_data(user_db)
         else: bot.reply_to(message, "Usage: /info 91xxxx")
 
-    # SYSTEM 2: TG TO NUMBER
+    # --- TG SCAN COMMAND ---
     elif message.text.startswith('/tg'):
         if user_db[uid]['credits'] < 1: return bot.reply_to(message, "❌ Low Credits!")
         args = message.text.split()
         if len(args) > 1:
-            m = bot.reply_to(message, "🔍 <b>Scanning Telegram DB...</b>", parse_mode="HTML")
+            m = bot.reply_to(message, "🔍 <b>Deep Scanning TG Profile...</b>", parse_mode="HTML")
             report = num.get_tg_details(args[1])
             bot.edit_message_text(report, message.chat.id, m.message_id, parse_mode="HTML")
             if "SASTA" in report:
@@ -118,4 +124,5 @@ def handle(message):
 
 if __name__ == "__main__":
     Thread(target=run).start()
+    print("🚀 BOT STARTED")
     bot.polling(none_stop=True)
