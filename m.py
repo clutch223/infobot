@@ -19,7 +19,11 @@ DB_FILE = "users.json"
 
 def load_db():
     if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r") as f: return json.load(f)
+        try:
+            with open(DB_FILE, "r") as f: 
+                content = f.read()
+                return json.loads(content) if content else {}
+        except: return {}
     return {}
 
 def save_db(data):
@@ -28,6 +32,7 @@ def save_db(data):
 db = load_db()
 
 def get_user(uid):
+    global db
     uid = str(uid)
     if uid not in db:
         db[uid] = {"credits": 10, "role": "Free User", "joined": time.ctime()}
@@ -112,9 +117,12 @@ def osint_handler(message):
             
         bot.edit_message_text(result, message.chat.id, wait.message_id, parse_mode="HTML")
         
-        if "💠" in result or "💎" in result or "🛰️" in result:
+        # Credit deduction logic based on successful identifiers in num.py output
+        success_keys = ["💎", "🛰️", "💠", "OWNER:", "MOBILE:"]
+        if any(key in result for key in success_keys):
             db[uid]['credits'] -= 1
             save_db(db)
+            
     except Exception as e:
         bot.edit_message_text(f"❌ <b>Error Occurred:</b> <code>{str(e)}</code>", message.chat.id, wait.message_id, parse_mode="HTML")
 
@@ -123,9 +131,10 @@ def osint_handler(message):
 def add_credits(message):
     if message.from_user.id != ADMIN: return
     try:
-        _, target, amt = message.text.split()
+        args = message.text.split()
+        target, amt = args[1], int(args[2])
         get_user(target)
-        db[target]['credits'] += int(amt)
+        db[target]['credits'] += amt
         save_db(db)
         bot.reply_to(message, f"✅ Done! {target} now has {db[target]['credits']} credits.")
     except: bot.reply_to(message, "Usage: /add <id> <amt>")
