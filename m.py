@@ -3,126 +3,139 @@ from telebot import types
 import json, os, time
 from flask import Flask
 from threading import Thread
-import num
+import num # Importing advanced logic
 
-# --- CONFIGURATION ---
+# --- AUTH CONFIG ---
 TOKEN = '8609540387:AAF_wXfX_lc6yc3OQokpAilUjaRPFDdiwQc'
-ADMIN_ID = 8787952549 
-CHANNEL_ID = '-1001003605767830' 
-CHANNEL_LINK = 'https://t.me/+jMe1PNQv_koxNzI1'
+ADMIN = 8787952549
+CHANNEL_ID = -1001003605767830
+CHANNEL_LINK = "https://t.me/+jMe1PNQv_koxNzI1"
 
-bot = telebot.TeleBot(TOKEN)
+bot = telebot.TeleBot(TOKEN, threaded=True, num_threads=10)
 app = Flask('')
-DATA_FILE = "user_database.json"
 
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            try: return json.load(f)
-            except: return {}
+# --- DATABASE MANAGEMENT ---
+DB_FILE = "users.json"
+
+def load_db():
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, "r") as f: return json.load(f)
     return {}
 
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+def save_db(data):
+    with open(DB_FILE, "w") as f: json.dump(data, f, indent=4)
 
-user_db = load_data()
+db = load_db()
 
+def get_user(uid):
+    uid = str(uid)
+    if uid not in db:
+        db[uid] = {"credits": 10, "role": "Free User", "joined": time.ctime()}
+        save_db(db)
+    return db[uid]
+
+# --- WEB SERVER (KEEP ALIVE) ---
 @app.route('/')
-def home(): return "Multi-OSINT System Online!"
+def status(): return "Bot Status: Active"
 
-def run(): app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+def run_server(): app.run(host='0.0.0.0', port=8080)
 
-def main_menu():
-    markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    markup.add("🔍 Info (Num)", "👤 TG-Scan", "👤 My Stats", "🆔 My ID", "🎁 Refer & Earn")
-    return markup
-
-def is_subscribed(user_id):
-    if int(user_id) == ADMIN_ID: return True
+# --- MIDDLEWARES ---
+def check_sub(uid):
+    if uid == ADMIN: return True
     try:
-        status = bot.get_chat_member(CHANNEL_ID, user_id).status
-        return status in ['member', 'administrator', 'creator']
-    except: return True 
+        member = bot.get_chat_member(CHANNEL_ID, uid)
+        return member.status in ['member', 'administrator', 'creator']
+    except: return True
 
+# --- COMMANDS ---
 @bot.message_handler(commands=['start'])
-def start(message):
+def welcome(message):
+    uid = message.from_user.id
+    u_info = get_user(uid)
+    
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("🔍 Number Info", callback_data="btn_info"),
+        types.InlineKeyboardButton("👤 TG Scanner", callback_data="btn_tg"),
+        types.InlineKeyboardButton("📊 My Account", callback_data="btn_stats")
+    )
+    markup.add(types.InlineKeyboardButton("📢 Updates Channel", url=CHANNEL_LINK))
+    
+    welcome_msg = (
+        f"🔥 <b>Welcome to SASTA OSINT v2.0</b>\n\n"
+        f"Hi {message.from_user.first_name}, ye bot aapko number ki puri details (KYC/Address) nikal kar dega.\n\n"
+        f"💰 <b>Your Credits:</b> <code>{u_info['credits']}</code>\n"
+        f"👑 <b>Access:</b> <code>{u_info['role']}</code>"
+    )
+    bot.send_message(message.chat.id, welcome_msg, parse_mode="HTML", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('btn_'))
+def handle_callbacks(call):
+    if not check_sub(call.from_user.id):
+        bot.answer_callback_query(call.id, "❌ Join channel first!", show_alert=True)
+        return
+
+    if call.data == "btn_info":
+        bot.edit_message_text("📱 <b>Ab number bhejo!</b>\nFormat: <code>/info 9198xxxxxx</code>", 
+                             call.message.chat.id, call.message.message_id, parse_mode="HTML")
+    elif call.data == "btn_tg":
+        bot.edit_message_text("🛰️ <b>TG Username ya ID bhejo!</b>\nFormat: <code>/tg @username</code>", 
+                             call.message.chat.id, call.message.message_id, parse_mode="HTML")
+    elif call.data == "btn_stats":
+        u = get_user(call.from_user.id)
+        bot.answer_callback_query(call.id, f"Credits: {u['credits']} | Plan: {u['role']}", show_alert=True)
+
+@bot.message_handler(commands=['info', 'tg'])
+def osint_handler(message):
     uid = str(message.from_user.id)
-    if uid not in user_db:
-        user_db[uid] = {"credits": 5, "refers": 0, "plan": "Free"}
-        save_data(user_db)
-        
-    if not is_subscribed(message.from_user.id):
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("📢 Join Channel", url=CHANNEL_LINK))
-        markup.add(types.InlineKeyboardButton("✅ Check Join", callback_data="check"))
-        bot.send_message(message.chat.id, "⚠️ <b>Please join our channel to use the bot!</b>", parse_mode="HTML", reply_markup=markup)
-    else:
-        bot.send_message(message.chat.id, "🔥 <b>SASTA OSINT ENGINE ONLINE</b> 🔥\n\n- Use <code>/info &lt;number&gt;</code> for KYC Details\n- Use <code>/tg &lt;username/id&gt;</code> for TG-to-Number", parse_mode="HTML", reply_markup=main_menu())
+    u_data = get_user(uid)
+    
+    if not check_sub(message.from_user.id):
+        return bot.reply_to(message, f"❌ <b>Pehle Join Karein:</b> {CHANNEL_LINK}", parse_mode="HTML")
 
-@bot.callback_query_handler(func=lambda c: c.data == "check")
-def check(call):
-    if is_subscribed(call.from_user.id):
-        bot.answer_callback_query(call.id, "✅ Access Granted!")
-        start(call.message)
-    else: bot.answer_callback_query(call.id, "❌ Join First!", show_alert=True)
+    if u_data['credits'] < 1:
+        return bot.reply_to(message, "❌ <b>Bhai credits khatam! Admin @SASTADEVELOPER se contact karo.</b>", parse_mode="HTML")
 
-@bot.message_handler(commands=['add'])
-def add(message):
-    if message.from_user.id != ADMIN_ID: return
     args = message.text.split()
-    if len(args) == 3:
-        target = args[1]
-        amount = int(args[2])
-        if target in user_db:
-            user_db[target]['credits'] += amount
-            save_data(user_db)
-            bot.reply_to(message, f"✅ Added {amount} credits to {target}")
-        else: bot.reply_to(message, "❌ User not in DB.")
+    if len(args) < 2:
+        return bot.reply_to(message, "⚠️ <b>Sahi se likho!</b> Example: <code>/info 91xxxx</code>", parse_mode="HTML")
 
-@bot.message_handler(func=lambda m: True)
-def handle_messages(message):
-    uid = str(message.from_user.id)
-    if not is_subscribed(message.from_user.id): return
+    query = args[1]
+    wait = bot.reply_to(message, "⏳ <b>Processing Request...</b>", parse_mode="HTML")
+    
+    try:
+        if message.text.startswith('/info'):
+            result = num.get_kyc_details(query)
+        else:
+            result = num.get_tg_details(query)
+            
+        bot.edit_message_text(result, message.chat.id, wait.message_id, parse_mode="HTML")
+        
+        if "💠" in result or "💎" in result or "🛰️" in result:
+            db[uid]['credits'] -= 1
+            save_db(db)
+    except Exception as e:
+        bot.edit_message_text(f"❌ <b>Error Occurred:</b> <code>{str(e)}</code>", message.chat.id, wait.message_id, parse_mode="HTML")
 
-    if message.text == "🔍 Info (Num)":
-        bot.reply_to(message, "Usage: <code>/info 91xxxx</code>", parse_mode="HTML")
-    elif message.text == "👤 TG-Scan":
-        bot.reply_to(message, "Usage: <code>/tg username</code>", parse_mode="HTML")
-    elif message.text == "👤 My Stats":
-        bot.reply_to(message, f"👤 <b>STATS</b>\n💰 Credits: {user_db[uid].get('credits', 0)}\n👑 Plan: {user_db[uid].get('plan', 'Free')}", parse_mode="HTML")
-    elif message.text == "🆔 My ID":
-        bot.reply_to(message, f"Your ID: <code>{uid}</code>", parse_mode="HTML")
-    elif message.text == "🎁 Refer & Earn":
-        bot.reply_to(message, f"Link: <code>https://t.me/{bot.get_me().username}?start={uid}</code>", parse_mode="HTML")
-
-    # --- KYC SCAN COMMAND ---
-    elif message.text.startswith('/info'):
-        if user_db[uid]['credits'] < 1: return bot.reply_to(message, "❌ Low Credits!")
-        args = message.text.split()
-        if len(args) > 1:
-            m = bot.reply_to(message, "🔍 <b>Searching KYC...</b>", parse_mode="HTML")
-            report = num.get_kyc_details(args[1])
-            bot.edit_message_text(report, message.chat.id, m.message_id, parse_mode="HTML")
-            if "SASTA" in report:
-                user_db[uid]['credits'] -= 1
-                save_data(user_db)
-        else: bot.reply_to(message, "Usage: /info 91xxxx")
-
-    # --- TG SCAN COMMAND ---
-    elif message.text.startswith('/tg'):
-        if user_db[uid]['credits'] < 1: return bot.reply_to(message, "❌ Low Credits!")
-        args = message.text.split()
-        if len(args) > 1:
-            m = bot.reply_to(message, "🔍 <b>Deep Scanning TG Profile...</b>", parse_mode="HTML")
-            report = num.get_tg_details(args[1])
-            bot.edit_message_text(report, message.chat.id, m.message_id, parse_mode="HTML")
-            if "SASTA" in report:
-                user_db[uid]['credits'] -= 1
-                save_data(user_db)
-        else: bot.reply_to(message, "Usage: /tg username")
+# --- ADMIN PANEL ---
+@bot.message_handler(commands=['add'])
+def add_credits(message):
+    if message.from_user.id != ADMIN: return
+    try:
+        _, target, amt = message.text.split()
+        get_user(target)
+        db[target]['credits'] += int(amt)
+        save_db(db)
+        bot.reply_to(message, f"✅ Done! {target} now has {db[target]['credits']} credits.")
+    except: bot.reply_to(message, "Usage: /add <id> <amt>")
 
 if __name__ == "__main__":
-    Thread(target=run).start()
-    print("🚀 BOT STARTED")
-    bot.polling(none_stop=True)
+    Thread(target=run_server).start()
+    print("✅ System Online. Anti-Crash Active.")
+    while True:
+        try:
+            bot.polling(none_stop=True, timeout=60)
+        except Exception as e:
+            print(f"Bot Polling Error: {e}")
+            time.sleep(5) # Restart after 5 seconds
