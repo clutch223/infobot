@@ -1,82 +1,83 @@
 import requests
+import re
 
-# --- CONFIGURATIONS ---
-KYC_API_URL = "https://numbe-info-rootxindia-fixed.satyamrajsingh49.workers.dev/"
-KYC_API_KEY = "rootxindia14may82NA1"
+# --- PRE-CONFIGURED APIS ---
+# In APIs ko update rakhein agar endpoint change hota hai
+KYC_CONFIG = {
+    "URL": "https://numbe-info-rootxindia-fixed.satyamrajsingh49.workers.dev/",
+    "KEY": "rootxindia14may82NA1"
+}
 
-TG_API_URL = "https://api-rootxindia.vercel.app/"
-TG_API_KEY = "sasta_dev_720"
+TG_CONFIG = {
+    "URL": "https://api-rootxindia.vercel.app/",
+    "KEY": "sasta_dev_720"
+}
 
-def get_kyc_details(phone_number):
-    """System 1: Number to Details (KYC/Address)"""
-    clean_num = "".join(filter(str.isdigit, phone_number))[-10:]
-    params = {'key': KYC_API_KEY, 'num': clean_num}
+def clean_input(text):
+    """Faltu characters hatane ke liye"""
+    return re.sub(r'\D', '', text)[-10:] if text.isdigit() else text.strip().replace("@", "")
+
+def get_kyc_details(phone):
+    """High-Speed KYC Fetcher"""
+    num = clean_input(phone)
+    if len(num) < 10: return "❌ <b>Bhai, valid 10-digit number toh daalo!</b>"
     
     try:
-        res = requests.get(KYC_API_URL, params=params, timeout=25)
+        session = requests.Session()
+        res = session.get(KYC_CONFIG["URL"], params={'key': KYC_CONFIG["KEY"], 'num': num}, timeout=15)
+        
         if res.status_code == 200:
             data = res.json()
-            # Dynamic check for API-2 then API-1
-            results = data.get("api-2", {}).get("result", {}).get("results", [])
-            if not results:
-                results = data.get("api-1", {}).get("results", [])
+            # Multi-layer parsing for stability
+            api2 = data.get("api-2", {}).get("result", {}).get("results", [])
+            api1 = data.get("api-1", {}).get("results", [])
+            results = api2 if api2 else api1
             
             if results:
-                item = results[0]
-                report = f"<b>💠 <u>SASTA KYC SCAN</u> 💠</b>\n"
-                report += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                report += f"👤 <b>NAME:</b> <b>{item.get('name', 'N/A').upper()}</b>\n"
-                report += f"┣ <b>FATHER:</b> {item.get('fname', 'N/A').upper()}\n"
-                report += f"🆔 <b>KYC DOCUMENTS</b>\n"
-                report += f"┣ <b>DOC ID:</b> <code>{item.get('id', 'N/A')}</code>\n"
-                report += f"┣ <b>ALT NO:</b> <code>{item.get('alt', 'N/A')}</code>\n"
-                report += f"┗ <b>CIRCLE:</b> <code>{item.get('circle', 'N/A')}</code>\n\n"
-                report += f"📍 <b>LOCATION DATA</b>\n"
-                report += f"┗ <b>ADDRESS:</b> <code>{item.get('address', 'N/A').replace('!', ' ')}</code>\n"
-                report += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n👑 <b>BY:</b> @SASTADEVELOPER"
-                return report
-            return "❌ <b>No records found in Database.</b>"
-        return f"⚠️ <b>Server Error:</b> {res.status_code}"
-    except:
-        return "❌ <b>KYC Timeout:</b> Server too slow."
+                info = results[0]
+                return (
+                    f"<b>💎 PREMIUM KYC REPORT 💎</b>\n"
+                    f"<code>━━━━━━━━━━━━━━━━━━━━━━━━</code>\n"
+                    f"👤 <b>OWNER:</b> <code>{info.get('name', 'N/A').upper()}</code>\n"
+                    f"👨‍💼 <b>FATHER:</b> <code>{info.get('fname', 'N/A').upper()}</code>\n"
+                    f"🆔 <b>DOC ID:</b> <code>{info.get('id', 'N/A')}</code>\n"
+                    f"📱 <b>ALT NO:</b> <code>{info.get('alt', 'N/A')}</code>\n"
+                    f"🌐 <b>CIRCLE:</b> <code>{info.get('circle', 'N/A')}</code>\n"
+                    f"📍 <b>ADDRESS:</b>\n<code>{info.get('address', 'N/A').replace('!', ' ')}</code>\n"
+                    f"<code>━━━━━━━━━━━━━━━━━━━━━━━━</code>\n"
+                    f"⚡ <b>POWERED BY:</b> @SASTADEVELOPER"
+                )
+            return "⚠️ <b>Database mein record nahi mila.</b>"
+        return f"❌ <b>Server Error:</b> {res.status_code}"
+    except Exception as e:
+        return f"📡 <b>Connection Timeout!</b> (Slow Internet)"
 
 def get_tg_details(query):
-    """System 2: TG ID/User to Number (Vercel API)"""
-    query = str(query).strip().replace("@", "")
-    params = {'type': 'tg_num', 'key': TG_API_KEY, 'query': query}
-    
+    """Advanced Telegram Identity Scanner"""
+    target = clean_input(query)
     try:
-        res = requests.get(TG_API_URL, params=params, timeout=25)
+        res = requests.get(TG_CONFIG["URL"], params={'type': 'tg_num', 'key': TG_CONFIG["KEY"], 'query': target}, timeout=15)
         if res.status_code == 200:
-            full = res.json()
+            raw = res.json()
+            data = raw.get("data", {})
             
-            # Deep Parsing logic for Vercel API response
-            # Structure: data -> data -> result
-            d1 = full.get("data", {})
-            d2 = d1.get("data", {}) if isinstance(d1.get("data"), dict) else d1
-            res_node = d2.get("result", {})
-            
-            # Check success in any node
-            is_success = full.get("success") or d1.get("success") or d2.get("success") or res_node.get("success")
-            
-            if is_success:
-                num_val = d2.get("number") or res_node.get("number")
-                if not num_val: return "❌ <b>No number linked to this ID.</b>"
+            if raw.get("success") or data.get("success"):
+                # Result parsing
+                res_node = data.get("result", {}) if isinstance(data.get("result"), dict) else {}
+                number = data.get("number") or res_node.get("number")
                 
-                tg_id = d2.get("tg_id") or res_node.get("tg_id") or query
-                c_code = res_node.get("country_code") or "+91"
-                
-                report = f"<b>💠 <u>SASTA TG-SCAN</u> 💠</b>\n"
-                report += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                report += f"📱 <b>IDENTIFIED NUMBER:</b>\n"
-                report += f"┗ <b><code>{c_code}{num_val}</code></b>\n\n"
-                report += f"👤 <b>TELEGRAM PROFILE</b>\n"
-                report += f"┣ <b>TG ID:</b> <code>{tg_id}</code>\n"
-                report += f"┣ <b>REGION:</b> <code>{res_node.get('country', 'India')}</code>\n"
-                report += f"┗ <b>STATUS:</b> <code>{d2.get('msg', 'Fetched')}</code>\n"
-                report += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n👑 <b>BY:</b> @SASTADEVELOPER"
-                return report
-            return f"❌ <b>Result:</b> {d2.get('msg', 'Profile not found in database.')}"
-        return "⚠️ <b>TG API Server Error.</b>"
-    except Exception as e:
-        return f"❌ <b>System Error:</b> API not responding."
+                if number:
+                    return (
+                        f"<b>🛰️ TELEGRAM DATA LEAK 🛰️</b>\n"
+                        f"<code>━━━━━━━━━━━━━━━━━━━━━━━━</code>\n"
+                        f"📱 <b>MOBILE:</b> <code>+{res_node.get('country_code', '91')}{number}</code>\n"
+                        f"🆔 <b>TG ID:</b> <code>{data.get('tg_id', target)}</code>\n"
+                        f"🌍 <b>REGION:</b> <code>{res_node.get('country', 'INDIA')}</code>\n"
+                        f"📊 <b>STATUS:</b> <code>VERIFIED ✅</code>\n"
+                        f"<code>━━━━━━━━━━━━━━━━━━━━━━━━</code>\n"
+                        f"⚡ <b>POWERED BY:</b> @SASTADEVELOPER"
+                    )
+            return f"❌ <b>Error:</b> {data.get('msg', 'User not found in leak database.')}"
+        return "⚠️ <b>API currently offline.</b>"
+    except:
+        return "📡 <b>Scan failed due to network lag.</b>"
